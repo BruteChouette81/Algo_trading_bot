@@ -4,6 +4,15 @@ import plotly.graph_objects as go
 import plotly.express as px
 import time
 import pandas as pd
+
+#calculate the actual average daily trading volume
+def adtv(volume, time_laps):
+    counter_average = 0
+    for vol in volume[-time_laps:]:
+        counter_average += float(vol[0])
+
+    return counter_average / time_laps
+
 kraken = krakenex.API()
 k = KrakenAPI(kraken)
 data = {
@@ -14,6 +23,11 @@ data = {
 
 times = str(int(time.time() - 43200))
 ohlc = k.get_ohlc_data('BTCUSD', since=times, ascending=True)
+
+vol = ohlc[0][["volume"]]
+#calculate the 30 minute volume average
+print(adtv(vol.values.tolist(), 30))
+
 
 btc = ohlc[0][["close"]]
 
@@ -44,16 +58,16 @@ price = btc["Price"].values.tolist()
 data["ma"].append(ma)
 data["prices"].append(price)
 
-ma_5min_data = data["ma"][0][-5:]
-price_5min_data = [price for price in reversed(data["prices"][0][-5:])]
+ma_10min_data = data["ma"][0][-10:] # reversed 
+price_10min_data = [price for price in data["prices"][0][-10:]] #reversed(data["prices"][0][-10:])
+print(price_10min_data)
+print(ma_10min_data)
 
-#reverse the ma data
 trend = []
 save_price = []
 counter = 0
-for i in range(0, 5):
-    if ma_5min_data[i] < price_5min_data[i]:
-        print(ma_5min_data[i])
+for i in range(0, 10):
+    if ma_10min_data[i] < price_10min_data[i]:
         trend.append("uptrend")
         if counter == 0:
             counter = 1
@@ -61,7 +75,7 @@ for i in range(0, 5):
         else:
             counter += 1
 
-    elif ma_5min_data[i] > price_5min_data[i]:
+    elif ma_10min_data[i] > price_10min_data[i]:
         trend.append("downtrend")
         counter - 1
     
@@ -70,8 +84,9 @@ for i in range(0, 5):
         continue
 
 print(trend)
-if counter >= 4:
+if counter >= 7:
     print("buy")
+
 
 else:
     print("sell")
@@ -99,6 +114,7 @@ class trend_following:
 
     #trend is up and real price is higher than the moving average == up trend = BUY
     #real price is same or lass than the average price == down trend = sell
+
 
 '''
 btc = ohlc[0][["close"]]
