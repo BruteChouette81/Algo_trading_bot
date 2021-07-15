@@ -13,6 +13,15 @@ def adtv(volume, time_laps):
 
     return counter_average / time_laps
 
+# verify if the volume is higher than the average volume
+def verify_adtv(adtv, live_volume):
+    if live_volume > adtv:
+        return True
+    elif adtv > live_volume:
+        return False
+    else:
+        return False
+
 kraken = krakenex.API()
 k = KrakenAPI(kraken)
 data = {
@@ -25,8 +34,12 @@ times = str(int(time.time() - 43200))
 ohlc = k.get_ohlc_data('BTCUSD', since=times, ascending=True)
 
 vol = ohlc[0][["volume"]]
+print(vol)
 #calculate the 30 minute volume average
-print(adtv(vol.values.tolist(), 30))
+av = adtv(vol.values.tolist(), 30)
+list_vol = vol.values.tolist()
+live_vol = float(list_vol[-1:][0][0])
+print(live_vol)
 
 
 btc = ohlc[0][["close"]]
@@ -44,7 +57,7 @@ fig = go.Figure(data = [go.Candlestick(x = ohlc[0].index,
                                         low = ohlc[0]['low'],
                                         close = ohlc[0]['close'],
                                         ),
-                        go.Scatter(x = ohlc[0].index, y = btc['5bar'], line=dict(color = 'red', width = 1))])
+                        go.Scatter(x = ohlc[0].index, y = btc['100ma'], line=dict(color = 'red', width = 1))])
 
 fig.add_trace(go.Scatter(x = ohlc[0].index, y = btc['8bar'], line=dict(color = 'green', width = 1)))
 
@@ -84,11 +97,15 @@ for i in range(0, 10):
         continue
 
 print(trend)
-if counter >= 7:
+
+volume_trend = verify_adtv(av, live_vol)
+print(av)
+print(live_vol)
+if counter >= 7 and volume_trend:
     print("buy")
 
 
-else:
+elif counter < 7 and volume_trend:
     print("sell")
 
 
