@@ -5,11 +5,11 @@ import plotly.express as px
 import time
 import pandas as pd
 import json
+import argparse
 kraken = krakenex.API()
 k = KrakenAPI(kraken)
+parser = argparse.ArgumentParser(description='Trading Bot by Thomas Berthiaume')
 
-MATIME = 10
-ADTVTIME = 30
 BALANCE = 100
 stock = 'BTCUSD'
 data = {
@@ -30,6 +30,11 @@ def create_file(trades):
     json_object = json.dumps(trades)
     with open("trades.json", "w") as file:
         file.write(json_object)
+
+def read_file():
+    with open("trades.json", "w") as file:
+        data = json.load(file)
+    return data["price"]
 
 
 #calculate the actual average daily trading volume
@@ -136,26 +141,59 @@ def verify_transaction(av, live_vol, counter):
     else:
         return None
 
+def save_transaction(req):
+    return req[0][["close"]]
+
 
 #trading crypto bot
-def bot():
-    req = request_data(stock)
-    btc, av, live_vol = calculate_indicator(req, MATIME=MATIME, ADTVTIME=ADTVTIME)
-    draw(req, btc)
-    trend, counter = algo(btc)
-    transaction = verify_transaction(av, live_vol, counter)
-    print(transaction)
+def bot(actived):
+    while actived:
+        req = request_data(stock)
+        btc, av, live_vol = calculate_indicator(req, MATIME=matime, ADTVTIME=adtvtime)
+        draw(req, btc)
+        trend, counter = algo(btc)
+        transaction = verify_transaction(av, live_vol, counter)
+        print(transaction)
+        if transaction == True:
+            price = save_transaction(req=req)
+            trades = create_trades(time.time(), True, False, stock, price.values.tolist())
+            create_file(trades)
+
+        elif transaction == False:
+            buy_price = read_file()
+            price = save_transaction(req=req)
+            if price > buy_price:
+                print("selling at profit")
+            else:
+                print("selling at loss")
+            trades = create_trades(time.time(), False, True, stock, price.values.tolist())
+            create_file(trades)
+
+        else:
+            print("stand by...")
+
+        time.sleep(30)
     
-
-
-
 
 #trend is up and real price is higher than the moving average == up trend = BUY
 #real price is same or lass than the average price == down trend = sell
 
 if __name__ == '__main__':
-    bot = bot()
+    parser.add_argument('--ma', type=int, help='define mobile average')
+    parser.add_argument('--adtv', type=int, help='define adtv')
+    args = parser.parse_args()
+    if args.ma:
+        matime = args.ma
+    else:
+        matime = 10
 
+    if args.adtv:
+        adtvtime = args.adtv
+
+    else:
+        adtvtime = 10
+    
+    bot = bot(True)
 
 
 '''
