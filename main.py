@@ -10,12 +10,10 @@ kraken = krakenex.API()
 k = KrakenAPI(kraken)
 parser = argparse.ArgumentParser(description='Trading Bot by Thomas Berthiaume')
 
+buy = 0
 BALANCE = 100
 stock = 'BTCUSD'
-data = {
-        'ma' : [],
-        'prices' : []
-        }
+
 
 def create_trades(time, buy, sell, stock, price):
     trades = {"time": time,
@@ -91,6 +89,10 @@ def draw(ohlc, btc):
 
 
 def algo(btc):
+    data = {
+        'ma' : [],
+        'prices' : []
+        }
     ma = btc["ma"].values.tolist()
     price = btc["Price"].values.tolist()
     data["ma"].append(ma)
@@ -142,24 +144,28 @@ def verify_transaction(av, live_vol, counter):
         return None
 
 def save_transaction(req):
-    return req[0][["close"]]
+    pp = req[0][["close"]].values.tolist()
+    return [price for price in pp[-1]]
 
 
 #trading crypto bot
-def bot(actived):
+def bot(actived, chart):
     while actived:
         req = request_data(stock)
         btc, av, live_vol = calculate_indicator(req, MATIME=matime, ADTVTIME=adtvtime)
-        draw(req, btc)
+        if chart:
+            draw(req, btc)
         trend, counter = algo(btc)
         transaction = verify_transaction(av, live_vol, counter)
         print(transaction)
         if transaction == True:
             price = save_transaction(req=req)
-            trades = create_trades(time.time(), True, False, stock, price.values.tolist())
+            print(price)
+            trades = create_trades(time.time(), True, False, stock, price)
             create_file(trades)
+            buy + 1
 
-        elif transaction == False:
+        elif transaction == False and buy == 1:
             buy_price = read_file()
             price = save_transaction(req=req)
             if price > buy_price:
@@ -168,6 +174,7 @@ def bot(actived):
                 print("selling at loss")
             trades = create_trades(time.time(), False, True, stock, price.values.tolist())
             create_file(trades)
+            buy - 1
 
         else:
             print("stand by...")
@@ -181,6 +188,7 @@ def bot(actived):
 if __name__ == '__main__':
     parser.add_argument('--ma', type=int, help='define mobile average')
     parser.add_argument('--adtv', type=int, help='define adtv')
+    parser.add_argument('--chart', type=int, help='draw the bitcoin price')
     args = parser.parse_args()
     if args.ma:
         matime = args.ma
@@ -192,8 +200,11 @@ if __name__ == '__main__':
 
     else:
         adtvtime = 10
-    
-    bot = bot(True)
+
+    if args.chart:
+        bot = bot(True, True)
+    else:
+        bot = bot(True, False)
 
 
 '''
