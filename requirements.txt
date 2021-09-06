@@ -1,0 +1,4 @@
+krakenex==2.1.0
+pykrakenapi==0.2.1
+plotly==5.0.0
+termcolor==1.1.0
