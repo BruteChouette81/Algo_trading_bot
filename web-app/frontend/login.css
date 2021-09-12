@@ -1,0 +1,36 @@
+
+body {
+    margin: 0;
+}
+
+
+#login-form {
+    align-items: center;
+    display: grid;
+    align-self: flex-start;
+    justify-items: center;
+
+}
+
+.login-form-field {
+    width: 40%;
+    border: none;
+    border-bottom: 1px solid #3a3a3a;
+    margin-bottom: 10px;
+    border-radius: 3px;
+    outline: none;
+    padding: 0px 0px 5px 5px;
+}
+
+#login-form-submit {
+    width: 40%;
+    padding: 7px;
+    border: none;
+    border-radius: 5px;
+    color: white;
+    font-weight: bold;
+    background-color: teal;
+    cursor: pointer;
+    outline: none;
+
+}
