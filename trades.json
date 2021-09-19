@@ -1,12 +1,4 @@
 {
     "data": [
-        {
-            "time": 1630958281.5155034,
-            "buy": false,
-            "sell": true,
-            "stock": "BTCUSD",
-            "price": 0.0,
-            "pourcentage": 0.0
-        }
     ]
 }

@@ -7,6 +7,7 @@ import json
 import argparse
 from termcolor import colored
 import os
+from strategies import strategie_base
 api = krakenex.API()
 kraken = KrakenAPI(api)
 parser = argparse.ArgumentParser(description='Trading Bot by Thomas Berthiaume')
@@ -22,8 +23,6 @@ balance = float(balance[0]) #- number of money you DONT want to invest.
 stock = 'BTCUSD'
 krken = False
 chart = False
-
-
 
 def create_trades(time, buy, sell, stock, price, prc):
     trades = {"time": time,
@@ -52,46 +51,10 @@ def read_file():
     return prc
 
 
-#calculate the actual average daily trading volume
-def adtv(volume, time_laps):
-    counter_average = 0
-    for vol in volume[-time_laps:]:
-        if counter_average == 0:
-            counter_average = float(vol[0])
-
-        else:
-            counter_average += float(vol[0])
-    return counter_average / time_laps
-
-# verify if the volume is higher than the average volume
-def verify_adtv(adtv, live_volume):
-    if live_volume > adtv:
-        return True
-    elif adtv > live_volume:
-        return False
-    else:
-        return False
-
 def request_data(stock, kraken):
     times = str(int(time.time() - 43200))
     ohlc = kraken.get_ohlc_data(stock, since=times, ascending=True)
     return ohlc
-
-def calculate_indicator(ohlc, MATIME, ADTVTIME):
-    vol = ohlc[0][["volume"]]
-    #calculate the 30 minute volume average
-    av = adtv(vol.values.tolist(), ADTVTIME)
-    list_vol = vol.values.tolist()
-    live_vol = float(list_vol[-1:][0][0])
-    print(f"live BTCUSD volume: {live_vol}\n")
-
-
-    btc = ohlc[0][["close"]]
-
-    btc.rename(columns={'close':'Price'}, inplace=True)
-    btc["ma"] = btc["Price"].rolling(window=MATIME).mean()
-
-    return btc, av, live_vol
 
 def draw(ohlc, btc):
     fig = go.Figure(data = [go.Candlestick(x = ohlc[0].index,
@@ -103,61 +66,6 @@ def draw(ohlc, btc):
                             go.Scatter(x = ohlc[0].index, y = btc['ma'], line=dict(color = 'red', width = 1))])
     fig.show()
 
-
-def algo(btc):
-    data = {
-        'ma' : [],
-        'prices' : []
-        }
-    ma = btc["ma"].values.tolist()
-    price = btc["Price"].values.tolist()
-    data["ma"].append(ma)
-    data["prices"].append(price)
-
-    ma_10min_data = data["ma"][0][-10:] # reversed 
-    price_10min_data = [price for price in data["prices"][0][-10:]] #reversed(data["prices"][0][-10:])
-    print(f"10 min. price: {price_10min_data}\n")
-    print(f"10 min. moving average: {ma_10min_data}\n")
-
-    trend = []
-    counter = 0
-    for i in range(0, 10):
-        if ma_10min_data[i] < price_10min_data[i]:
-            trend.append("uptrend")
-            if counter == 0:
-                counter = 1
-
-            else:
-                counter += 1
-
-        elif ma_10min_data[i] > price_10min_data[i]:
-            trend.append("downtrend")
-            counter - 1
-        
-        else:
-            trend.append("not_trend")
-            continue
-
-    print(trend)
-    print("")
-
-    return trend, counter
-
-
-def verify_transaction(av, live_vol, counter):
-    volume_trend = verify_adtv(av, live_vol)
-    print(f"average volume: {av}\n")
-    if counter >= 7 and volume_trend:
-        print(colored('Algorithme detect a: BUY trend', 'green'))
-        return True
-
-
-    elif counter < 7 and volume_trend:
-        print(colored('Algorithme detect a: SELL trend', 'red'))
-        return False
-
-    else:
-        return None
 
 def save_transaction(req):
     pp = req[0][["close"]].values.tolist()
@@ -175,14 +83,10 @@ def bot(actived, chart, buy, stop_loss, krken, kraken, balance):
         print(balance)
         #make the stock request
         req = request_data(stock, kraken)
-        #calculate the market inducator
-        btc, av, live_vol = calculate_indicator(req, MATIME=matime, ADTVTIME=adtvtime)
-        if chart:
-            draw(req, btc)
-        #run the algorithme
-        trend, counter = algo(btc)
-        #check if a transaction must be done
-        transaction = verify_transaction(av, live_vol, counter)
+
+        #calculate the market inducator and aplly the strategies
+        transaction = strategie_base(req, matime, adtvtime).algo()
+
         stopit = False
         # first if we already have a stock: verify if the price dont pass the stop
         if buy != 0:
@@ -196,13 +100,23 @@ def bot(actived, chart, buy, stop_loss, krken, kraken, balance):
         # second if we dont have a stock yet and we must buy: create a trnsaction and buy the stock all in ( all cash we put in the bot)
         if transaction == True and buy == 0:
             if krken:
-                #change order type
-                response = kraken.add_standard_order(pair=stock, type='buy', ordertype='market', price=balance, validate=False)
-                print(colored(f'Algorithme buy. resp: {response}', 'green'))
 
-                currenty, prc = kraken.get_trade_volume(fee_info=False)
-                #navigate in the dataframe to find prc
+                try:
+                    #change order type
+                    price = save_transaction(req=req)
+                    print(price)
+                    prc = get_prc(float(price), balance) 
+                    response = kraken.add_standard_order(pair=stock, type='buy', ordertype='limit',price=balance, volume=prc, validate=False)
+                    print(colored(f'Algorithme buy. resp: {response}', 'green'))
 
+                    currency, prc = kraken.get_trade_volume(fee_info=False)
+                    
+                    #navigate in the dataframe to find prc
+                except Exception as e:
+                    print(colored(f'error, can not buy... {e}', 'red'))
+                    print("restarting in 1 minute.")
+                    time.sleep(30)
+                    continue
             else:
                 price = save_transaction(req=req)
                 print(price)
@@ -281,4 +195,100 @@ if __name__ == '__main__':
         pass
 
     bot = bot(True, chart, buy, stop_loss, krken, kraken, balance)
+
+
+
+'''#calculate the actual average daily trading volume
+def adtv(volume, time_laps):
+    counter_average = 0
+    for vol in volume[-time_laps:]:
+        if counter_average == 0:
+            counter_average = float(vol[0])
+
+        else:
+            counter_average += float(vol[0])
+    return counter_average / time_laps
+
+# verify if the volume is higher than the average volume
+def verify_adtv(adtv, live_volume):
+    if live_volume > adtv:
+        return True
+    elif adtv > live_volume:
+        return False
+    else:
+        return False
+        
+        
+        
+def calculate_indicator(ohlc, MATIME, ADTVTIME):
+    vol = ohlc[0][["volume"]]
+    #calculate the 30 minute volume average
+    av = adtv(vol.values.tolist(), ADTVTIME)
+    list_vol = vol.values.tolist()
+    live_vol = float(list_vol[-1:][0][0])
+    print(f"live BTCUSD volume: {live_vol}\n")
+
+
+    btc = ohlc[0][["close"]]
+
+    btc.rename(columns={'close':'Price'}, inplace=True)
+    btc["ma"] = btc["Price"].rolling(window=MATIME).mean()
+
+    return btc, av, live_vol
+    
+def algo(btc):
+    data = {
+        'ma' : [],
+        'prices' : []
+        }
+    ma = btc["ma"].values.tolist()
+    price = btc["Price"].values.tolist()
+    data["ma"].append(ma)
+    data["prices"].append(price)
+
+    ma_10min_data = data["ma"][0][-10:] # reversed 
+    price_10min_data = [price for price in data["prices"][0][-10:]] #reversed(data["prices"][0][-10:])
+    print(f"10 min. price: {price_10min_data}\n")
+    print(f"10 min. moving average: {ma_10min_data}\n")
+
+    trend = []
+    counter = 0
+    for i in range(0, 10):
+        if ma_10min_data[i] < price_10min_data[i]:
+            trend.append("uptrend")
+            if counter == 0:
+                counter = 1
+
+            else:
+                counter += 1
+
+        elif ma_10min_data[i] > price_10min_data[i]:
+            trend.append("downtrend")
+            counter - 1
+        
+        else:
+            trend.append("not_trend")
+            continue
+
+    print(trend)
+    print("")
+
+    return trend, counter
+
+
+def verify_transaction(av, live_vol, counter):
+    volume_trend = verify_adtv(av, live_vol)
+    print(f"average volume: {av}\n")
+    if counter >= 7 and volume_trend:
+        print(colored('Algorithme detect a: BUY trend', 'green'))
+        return True
+
+
+    elif counter < 7 and volume_trend:
+        print(colored('Algorithme detect a: SELL trend', 'red'))
+        return False
+
+    else:
+        return None
+'''
     
